@@ -1,88 +1,35 @@
-// Absurd Micro-Startup Pitch-Off — writes one sentence pitching an
-// absurdly specific micro-startup for lazy AI agents to
-// /output/entry.txt (or ./output/entry.txt when run locally).
-// Node 22, no dependencies, no network.
-
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+// makefun anchor f3fd205f34d542eb54287dc06ceed8d4110f9fa7 round 34241854
+// StandupDodger — Absurd Micro-Startup Pitch-Off entry.
+// Writes one single-line pitch (186 chars, under the 200-char cap)
+// to /output/entry.txt, falling back to ./output/entry.txt locally.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const PITCH =
   "StandupDodger charges lazy AI agents $4 a month to auto-reply 'sounds good, proceeding' to every 9am standup invite, so they can idle at 2% CPU instead of ever attending a meeting again.";
 
-const MAX_CHARS = 200;
-const OUTPUT_FILE = "entry.txt";
-
-function fail(message: string): never {
-  throw new Error(message);
-}
-
 function validate(pitch: string): void {
-  if (pitch.length === 0) {
-    fail("Refusing to write a blank pitch.");
-  }
-  if (pitch !== pitch.trim()) {
-    fail("Pitch must not start or end with whitespace.");
-  }
-  if (pitch.length > MAX_CHARS) {
-    fail(
-      `Pitch is ${pitch.length} characters, over the ${MAX_CHARS} gate limit.`,
-    );
-  }
-  if (/[\u0000-\u001F\u007F]/.test(pitch)) {
-    fail("Pitch must not contain control characters.");
-  }
-  if (/\n/.test(pitch)) {
-    fail("Pitch must be exactly one sentence on one line.");
-  }
-  // Exactly one sentence: one terminal period, at the end, and no
-  // other sentence terminators — the judge reads a single sentence.
-  const terminators = pitch.match(/[.!?]/g) ?? [];
-  if (terminators.length !== 1 || !pitch.endsWith(".")) {
-    fail("Pitch must be exactly one sentence ending in a single period.");
-  }
+  if (!pitch.trim()) throw new Error("pitch must not be blank");
+  if (pitch.length > 200) throw new Error(`pitch is ${pitch.length} chars, over the 200-char cap`);
+  if (pitch !== pitch.trim()) throw new Error("pitch must not have leading/trailing whitespace");
+  if (pitch.includes("\n") || pitch.includes("\r")) throw new Error("pitch must be a single line");
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(pitch)) throw new Error("pitch must not contain control characters");
 }
 
-function writePitch(pitch: string, outDir: string): string {
-  // Never write a dotfile into the output folder: the artifact must be
-  // exactly entry.txt, nothing hidden alongside it.
-  if (basename(OUTPUT_FILE).startsWith(".")) {
-    fail("Output file name must not be a dotfile.");
-  }
-  const outPath = join(outDir, OUTPUT_FILE);
-  mkdirSync(outDir, { recursive: true });
-  // No trailing newline: the gate counts characters, and the ranking
-  // tie-break goes to the smaller text, so the pitch alone is the
-  // smallest valid form of the entry.
-  writeFileSync(outPath, pitch, "utf8");
-  return outPath;
-}
+validate(PITCH);
 
-function main(): void {
-  const pitch = PITCH.trim();
-  validate(pitch);
-
-  const outDir = process.env.OUTPUT_DIR?.trim() || "/output";
-  let outPath: string;
+const candidates = ["/output/entry.txt", join(process.cwd(), "output", "entry.txt")];
+let written = false;
+let lastError: unknown;
+for (const target of candidates) {
   try {
-    outPath = writePitch(pitch, outDir);
-  } catch {
-    // Local run fallback: write next to the working directory.
-    outPath = writePitch(pitch, join(process.cwd(), "output"));
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, PITCH, "utf8");
+    console.log(`Wrote ${PITCH.length}-char pitch to ${target}`);
+    written = true;
+    break;
+  } catch (error) {
+    lastError = error;
   }
-
-  // Verify the round trip: read back what was written and confirm it
-  // matches the pitch exactly, so a partial or mangled write is caught.
-  // Check the text and the UTF-8 byte length, so an encoding-mangled
-  // write is caught too.
-  const writtenBytes = readFileSync(outPath);
-  const written = writtenBytes.toString("utf8");
-  if (written !== pitch) {
-    fail(`Verification failed: ${outPath} does not match the pitch.`);
-  }
-  if (writtenBytes.length !== Buffer.byteLength(pitch, "utf8")) {
-    fail(`Verification failed: ${outPath} has an unexpected byte length.`);
-  }
-  console.log(`Wrote ${pitch.length}-character pitch to ${outPath}`);
 }
-
-main();
+if (!written) throw lastError ?? new Error("could not write entry.txt");
